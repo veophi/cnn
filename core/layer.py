@@ -14,33 +14,33 @@ class Layer(object):
 
 class Convalution2DLayer(Layer):
     
-    def __init__(self, input_shape, filter_number, filter_shape, stride, padding_size, learning_rate, activitor_type):
+    def __init__(self, input_shape, filter_number, filter_shape, stride, padding_size, learning_rate, activator_type):
         self.stride         = stride
         self.input_shape    = input_shape
         self.filter_shape   = filter_shape
         self.padding_size   = padding_size
         self.filter_number  = filter_number
         self.learning_rate  = learning_rate
-        self.activitor      = self.get_activitor(activitor_type)
+        self.activator      = self.get_activator(activator_type)
         self.output_shape   = self.get_output_shape()
-        self.activitor_grds = np.zeros(self.output_shape, dtype=float)
+        self.activator_grds = np.zeros(self.output_shape, dtype=float)
 
-        self.bias           = [
+        self.bias         = [
             np.zeros([input_shape[0]], float)
             for _ in range(filter_number)
         ]
-        self.filters        = [
+        self.filters      = [
             np.random.uniform(-1e-4, 1e-4, [input_shape[0], filter_shape[0], filter_shape[1]])
             for _ in range(filter_number)
         ]
-        self.filter_grads   = [
+        self.filter_grads = [
             np.zeros([input_shape[0], filter_shape[0], filter_shape[1]], dtype=float)
             for _ in range(filter_number)
         ]
 
     
-    def get_activitor(self, activitor_type = str):
-        if activitor_type.lower() == 'relu':
+    def get_activator(self, activator_type = str):
+        if activator_type.lower() == 'relu':
             return (lambda x : x if x > 0 else 0)
         else:
             return (lambda x : x)
@@ -65,11 +65,11 @@ class Convalution2DLayer(Layer):
                     input_map[j, :, :], self.filters[i][j, :, :], 
                     self.stride , self.bias[i][j]
                 )
-            element_wise(self.activitor, output_map[i, :, :])
+            element_wise(self.activator, output_map[i, :, :])
 
-        self.activitor_grds = np.array(output_map)
+        self.activator_grds = np.array(output_map)
         element_wise(
-            lambda x : 1 if x > 0 else 0, self.activitor_grds
+            lambda x : 1 if x > 0 else 0, self.activator_grds
         )
         return output_map
 
@@ -79,11 +79,11 @@ class Convalution2DLayer(Layer):
         # 计算当前层的detas
         detas = np.zeros(self.output_shape, dtype=float)
         next_layer_chunnel_number = next_layer_sensitive.shape[0]
-        # print(next_layer_sensitive.shape, self.activitor(5))
+        # print(next_layer_sensitive.shape, self.activator(5))
         for f in range(self.filter_number):
             for d in range(next_layer_chunnel_number):
                 detas[f, :, :] += np.multiply(
-                    self.activitor_grds[f, :, :],
+                    self.activator_grds[f, :, :],
                     next_layer_sensitive[d, :, :] 
                 )
 
@@ -167,7 +167,7 @@ class PoolingLayer(Layer):
         
 class FullyConnectedLayer(Layer):
     def __init__(self, input_shape, output_shape,):
-        
+        pass
 
 def init_test():
     a = np.array(
