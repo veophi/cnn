@@ -64,13 +64,13 @@ class Convalution2DLayer(Layer):
             input_map = np.array(input_map, dtype = np.float64)
         input_map = padding_0(input_map, self.padding_size)
 
-        for i in range(self.filter_number):
-            for j in range(self.input_shape[0]):
-                output_map[i, :, :] += convalution_2d(
-                    input_map[j, :, :], self.filters[i][j, :, :], 
-                    self.stride , self.bias[i]
+        for f in range(self.filter_number):
+            for d in range(self.input_shape[0]):
+                output_map[f, :, :] += convalution_2d(
+                    input_map[d, :, :], self.filters[f][d, :, :], 
+                    self.stride , self.bias[f]
                 )
-            element_wise(self.activator, output_map[i, :, :])
+            element_wise(self.activator, output_map[f, :, :])
 
         self.activator_grds = np.array(output_map, dtype = np.float64)
         element_wise(
