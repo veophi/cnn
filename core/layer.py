@@ -41,9 +41,9 @@ class Convalution2DLayer(Layer):
     
     def get_activator(self, activator_type = str):
         if activator_type.lower() == 'relu':
-            return (lambda x : x if x > 0 else 0)
+            return lambda x : x if x > 0 else 0
         else:
-            return (lambda x : x)
+            return lambda x : x
         
     def get_output_shape(self):
         chunnel = self.filter_number
