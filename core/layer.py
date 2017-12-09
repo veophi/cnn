@@ -23,7 +23,7 @@ class Convalution2DLayer(Layer):
         self.padding_size   = padding_size
         self.filter_number  = filter_number
         self.learning_rate  = learning_rate
-        self.activator      = self.get_activator(activator_type)
+        self.activator      = get_activator(activator_type)
         self.output_shape   = self.get_output_shape()
         self.activator_grds = np.zeros(self.output_shape, dtype=np.float64)
 
@@ -38,13 +38,6 @@ class Convalution2DLayer(Layer):
             np.zeros([input_shape[0], filter_shape[0], filter_shape[1]], dtype=np.float64)
             for _ in range(filter_number)
         ]
-
-    
-    def get_activator(self, activator_type = str):
-        if activator_type.lower() == 'relu':
-            return lambda x : x if x > 0 else 0
-        else:
-            return lambda x : x
         
     def get_output_shape(self):
         chunnel = self.filter_number
@@ -53,17 +46,14 @@ class Convalution2DLayer(Layer):
         return [chunnel, height, width]
 
     def forward_pass(self, input_map):
+        #输入类型检查和shape大小匹配
         assert(input_map.shape == tuple(self.input_shape))
-
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
-        output_map = np.zeros(
-            self.get_output_shape(), dtype=np.float64
-        )
-        if type(input_map) == 'list':
-            input_map = np.array(input_map, dtype = np.float64)
-        input_map = padding_0(input_map, self.padding_size)
-
+            input_map = np.array(input_map, dtype=np.float64)
+        
+        #计算当前层输出结果    
+        output_map = np.zeros(self.output_shape, dtype=np.float64)
+        input_map  = padding_0(input_map, self.padding_size)
         for f in range(self.filter_number):
             for d in range(self.input_shape[0]):
                 output_map[f, :, :] += convalution_2d(
@@ -72,19 +62,22 @@ class Convalution2DLayer(Layer):
                 )
             element_wise(self.activator, output_map[f, :, :])
 
-        self.activator_grds = np.array(output_map, dtype = np.float64)
+        #获得当前层激活函数的导数
+        self.activator_grds = np.array(output_map, dtype=np.float64)
         element_wise(
             lambda x : 1 if x > 0 else 0, self.activator_grds
         )
+
         return output_map
 
     #向后传播，
     def backward_pass(self, input_map, next_layer_sensitive):
+        #输入类型检查和shape大小匹配
         assert(input_map.shape == tuple(self.input_shape))
         assert(next_layer_sensitive.shape == tuple(self.output_shape))
-
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
+            input_map = np.array(input_map, dtype=np.float64)
+
         # 计算当前层的detas
         detas = np.multiply(next_layer_sensitive, self.activator_grds)
         # detas = np.zeros(self.output_shape, dtype=np.float64)
@@ -101,7 +94,7 @@ class Convalution2DLayer(Layer):
         pd_height = self.input_shape[1] - self.filter_shape[0] + 1
         pd_width  = self.input_shape[2] - self.filter_shape[1] + 1
         pd_shape  = [pd_height, pd_width]
-        detas = np.ones(self.output_shape)
+        # detas = np.ones(self.output_shape) #for debug
         detas = extend_map_with_stride1(detas, pd_shape, self.stride)
         for f in range(self.filter_number):
             self.bias_grads[f] = detas[f].sum()
@@ -128,29 +121,34 @@ class Convalution2DLayer(Layer):
             self.bias[f]    -= self.bias_grads[f]
             self.filters[f] -= self.filter_grads[f]
 
-        return np.array(cur_layer_sensitive, dtype = np.float64)
+        return np.array(cur_layer_sensitive, dtype=np.float64)
         
 class PoolingLayer(Layer):
     def __init__(self, input_shape, pooling_shape, stride, padding_size, pooling_type):
         self.stride        = stride
-        self.index_map     = None
         self.input_shape   = input_shape
         self.padding_size  = padding_size
         self.pooling_shape = pooling_shape
         self.output_shape  = self.get_output_shape()
+        self.index_map     = np.zeros(self.output_shape, dtype=tuple)
         
+    def get_output_shape(self):
+        width  = ceil((self.input_shape[1] - self.pooling_shape[0] + 2*self.padding_size[0]) / self.stride[0]) + 1
+        height = ceil((self.input_shape[2] - self.pooling_shape[1] + 2*self.padding_size[1]) / self.stride[1]) + 1
+        return [self.input_shape[0], height, width] 
+
     def forward_pass(self, input_map):
+        #输入类型检查和shape大小匹配
         assert(input_map.shape == tuple(self.input_shape))
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
-        input_map = padding_0(input_map, self.padding_size)
-        input_map = np.array(input_map, dtype = np.float64)
-        # print(input_map)
-        ph, pw = self.pooling_shape
+            input_map = np.array(input_map, dtype=np.float64)
+
+        #计算当前层输出
+        ph, pw     = self.pooling_shape
+        input_map  = padding_0(input_map, self.padding_size)
+        output_map = np.zeros(self.output_shape, dtype=np.float64)
         _, in_height, in_width  = input_map.shape
         depth, height, width    = self.output_shape
-        self.index_map = np.zeros(self.output_shape, dtype=tuple)
-        output_map = np.zeros(self.output_shape, dtype=np.float64)
         for d in range(depth):
             for h in range(height):
                 for w in range(width):
@@ -163,12 +161,16 @@ class PoolingLayer(Layer):
                     max_id = (d, temp[0] + hl, temp[1] + wl)
                     output_map[d,h,w]     = input_map[max_id]
                     self.index_map[d,h,w] = max_id
+
         return output_map
 
     def backward_pass(self, input_map, next_layer_sensitive):
+        #输入类型检查和shape大小匹配
         assert(input_map.shape == tuple(self.input_shape))
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
+            input_map = np.array(input_map, dtype=np.float64)
+        
+        #这里只需要计算向后层需要的sensitive
         cur_layer_sensitive  = np.zeros(self.input_shape, dtype=np.float64)
         depth, height, width = next_layer_sensitive.shape
         for d in range(depth):
@@ -176,16 +178,12 @@ class PoolingLayer(Layer):
                 for w in range(width):
                     max_id = self.index_map[d,h,w]
                     cur_layer_sensitive[max_id] = next_layer_sensitive[d,h,w]
+
         return cur_layer_sensitive
-
-    def get_output_shape(self):
-        width  = ceil((self.input_shape[1] - self.pooling_shape[0] + 2*self.padding_size[0]) / self.stride[0]) + 1
-        height = ceil((self.input_shape[2] - self.pooling_shape[1] + 2*self.padding_size[1]) / self.stride[1]) + 1
-        return [self.input_shape[0], height, width] 
-
         
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_shape, output_shape):
+    def __init__(self, input_shape, output_shape, activator_type):
+        self.activator      = get_activator(activator_type)
         self.input_shape    = input_shape
         self.output_shape   = output_shape
         self.activator_grds = None
@@ -196,27 +194,31 @@ class FullyConnectedLayer(Layer):
         self.weights_grads  = np.zeros([output_shape, input_shape], dtype=np.float64)
 
     def forward_pass(self, input_map):
+        #输入类型检查和shape大小匹配
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
+            input_map = np.array(input_map, dtype=np.float64)
         input_map = input_map.flatten()
-        print(input_map.shape[0], self.input_shape)
         assert(input_map.shape[0] == self.input_shape)
 
+        #计算当前层输出
         output_map = []
         for i in range(self.output_shape):
             n_put = np.multiply(self.weights[i], input_map).sum() + self.bias[i]
-            output_map.append(n_put) 
-        output_map = np.array(output_map, dtype = np.float64)
-        self.activator_grds = np.array(output_map, dtype = np.float64)
+            output_map.append(self.activator(n_put)) 
+        output_map = np.array(output_map, dtype=np.float64)
+
+        #计算当前层激活函数导数
+        self.activator_grds = np.array(output_map, dtype=np.float64)
         element_wise(
             lambda x : 1 if x > 0 else 0, self.activator_grds
         )
+        
         return output_map
     
     def backward_pass(self, input_map, next_layer_sensitive):
         # 类型检查和shape匹配
         if type(input_map) != 'numpy.ndarray':
-            input_map = np.array(input_map, dtype = np.float64)
+            input_map = np.array(input_map, dtype=np.float64)
         org_shape = input_map.shape
         input_map = input_map.flatten()
         next_layer_sensitive = next_layer_sensitive.flatten()
@@ -242,15 +244,3 @@ class FullyConnectedLayer(Layer):
         self.weights -= self.weights_grads
 
         return cur_layer_sensitive
-  
-if __name__ == '__main__':
-    input_map, sen, f = init_test()
-    # x = PoolingLayer([3,5,5],[2,2],[2, 2], [0,0], 'max')
-    x = FullyConnectedLayer(5*5*3, 8)
-    # x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
-    # x.filters = f
-    # print(input_map.shape)
-    y = x.forward_pass(input_map)
-    print(y)
-    y = x.backward_pass(input_map,sen)
-    print(y)

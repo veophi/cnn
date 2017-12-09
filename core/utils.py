@@ -1,5 +1,6 @@
 import numpy as np
 from math import *
+from layer import *
 
 def element_wise(func, array):
     for i in np.nditer(array, op_flags=['readwrite']):
@@ -73,7 +74,11 @@ def get_maxvalue_index(org_map2d):
                 max_id = (h, w)
     return max_id
 
-
+def get_activator(activator_type = str):
+    if activator_type.lower() == 'relu':
+        return lambda x : x if x > 0 else 0
+    else:
+        return lambda x : x
 
 def init_test():
     a = np.array(
@@ -140,4 +145,13 @@ def init_test():
  
 
 if __name__ == '__main__':
-    test_conv();
+    input_map, sen, f = init_test()
+    # x = PoolingLayer([3,5,5],[2,2],[2, 2], [0,0], 'max')
+    # x = FullyConnectedLayer(5*5*3, 8, 'relu')
+    x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
+    x.filters = f
+    # print(input_map.shape)
+    y = x.forward_pass(input_map)
+    print(y)
+    y = x.backward_pass(input_map,sen)
+    print(y)
