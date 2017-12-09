@@ -118,8 +118,8 @@ class Convalution2DLayer(Layer):
 
         # 更新权值
         for f in range(self.filter_number):
-            self.bias[f]    -= self.bias_grads[f]
-            self.filters[f] -= self.filter_grads[f]
+            self.bias[f]    -= self.learning_rate * self.bias_grads[f]
+            self.filters[f] -= self.learning_rate * self.filter_grads[f]
 
         return np.array(cur_layer_sensitive, dtype=np.float64)
         
@@ -182,10 +182,11 @@ class PoolingLayer(Layer):
         return cur_layer_sensitive
         
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_shape, output_shape, activator_type):
+    def __init__(self, input_shape, output_shape, learning_rate, activator_type):
         self.activator      = get_activator(activator_type)
         self.input_shape    = input_shape
         self.output_shape   = output_shape
+        self.learning_rate  = learning_rate
         self.activator_grds = None
         
         self.bias           = np.zeros((output_shape), dtype=np.float64)
@@ -240,7 +241,7 @@ class FullyConnectedLayer(Layer):
         cur_layer_sensitive = cur_layer_sensitive.reshape(org_shape)
 
         #更新本层的权值
-        self.bias    -= self.bias_grads
-        self.weights -= self.weights_grads
+        self.bias    -= self.learning_rate * self.bias_grads
+        self.weights -= self.learning_rate * self.weights_grads
 
         return cur_layer_sensitive

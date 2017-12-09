@@ -147,9 +147,9 @@ def init_test():
 if __name__ == '__main__':
     input_map, sen, f = init_test()
     # x = PoolingLayer([3,5,5],[2,2],[2, 2], [0,0], 'max')
-    # x = FullyConnectedLayer(5*5*3, 8, 'relu')
+    # x = FullyConnectedLayer(5*5*3, 8, 0.0001, 'relu')
     x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
-    x.filters = f
+    # x.filters = f
     # print(input_map.shape)
     y = x.forward_pass(input_map)
     print(y)
