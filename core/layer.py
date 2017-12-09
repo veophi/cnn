@@ -1,3 +1,5 @@
+# -*- coding:utf-8 -*-
+
 from utils import *
 import numpy as np
 
@@ -23,18 +25,17 @@ class Convalution2DLayer(Layer):
         self.learning_rate  = learning_rate
         self.activator      = self.get_activator(activator_type)
         self.output_shape   = self.get_output_shape()
-        self.activator_grds = np.zeros(self.output_shape, dtype=float)
+        self.activator_grds = np.zeros(self.output_shape, dtype=np.float64)
 
-        self.bias         = [
-            np.zeros([input_shape[0]], float)
-            for _ in range(filter_number)
-        ]
-        self.filters      = [
+        self.bias           = np.zeros((self.filter_number), dtype=np.float64)
+        self.bias_grads     = np.zeros((self.filter_number), dtype=np.float64)
+
+        self.filters        = [
             np.random.uniform(-1e-4, 1e-4, [input_shape[0], filter_shape[0], filter_shape[1]])
             for _ in range(filter_number)
         ]
-        self.filter_grads = [
-            np.zeros([input_shape[0], filter_shape[0], filter_shape[1]], dtype=float)
+        self.filter_grads   = [
+            np.zeros([input_shape[0], filter_shape[0], filter_shape[1]], dtype=np.float64)
             for _ in range(filter_number)
         ]
 
@@ -47,27 +48,31 @@ class Convalution2DLayer(Layer):
         
     def get_output_shape(self):
         chunnel = self.filter_number
-        height  = ceil((self.input_shape[1] - self.filter_shape[0] + 1 + self.padding_size[0]) / self.stride[0])
-        width   = ceil((self.input_shape[2] - self.filter_shape[1] + 1 + self.padding_size[1]) / self.stride[1])
+        height  = int((self.input_shape[1] - self.filter_shape[0] + 2*self.padding_size[0]) / self.stride[0] + 1 )
+        width   = int((self.input_shape[2] - self.filter_shape[1] + 2*self.padding_size[1]) / self.stride[1] + 1 )
         return [chunnel, height, width]
 
     def forward_pass(self, input_map):
+        assert(input_map.shape == tuple(self.input_shape))
+
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
         output_map = np.zeros(
-            self.get_output_shape(), float
+            self.get_output_shape(), dtype=np.float64
         )
         if type(input_map) == 'list':
-            input_map = np.array(input_map)
+            input_map = np.array(input_map, dtype = np.float64)
         input_map = padding_0(input_map, self.padding_size)
 
         for i in range(self.filter_number):
             for j in range(self.input_shape[0]):
                 output_map[i, :, :] += convalution_2d(
                     input_map[j, :, :], self.filters[i][j, :, :], 
-                    self.stride , self.bias[i][j]
+                    self.stride , self.bias[i]
                 )
             element_wise(self.activator, output_map[i, :, :])
 
-        self.activator_grds = np.array(output_map)
+        self.activator_grds = np.array(output_map, dtype = np.float64)
         element_wise(
             lambda x : 1 if x > 0 else 0, self.activator_grds
         )
@@ -75,46 +80,55 @@ class Convalution2DLayer(Layer):
 
     #向后传播，
     def backward_pass(self, input_map, next_layer_sensitive):
+        assert(input_map.shape == tuple(self.input_shape))
+        assert(next_layer_sensitive.shape == tuple(self.output_shape))
 
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
         # 计算当前层的detas
-        detas = np.zeros(self.output_shape, dtype=float)
-        next_layer_chunnel_number = next_layer_sensitive.shape[0]
+        detas = np.multiply(next_layer_sensitive, self.activator_grds)
+        # detas = np.zeros(self.output_shape, dtype=np.float64)
+        # next_layer_chunnel_number = next_layer_sensitive.shape[0]
         # print(next_layer_sensitive.shape, self.activator(5))
-        for f in range(self.filter_number):
-            for d in range(next_layer_chunnel_number):
-                detas[f, :, :] += np.multiply(
-                    self.activator_grds[f, :, :],
-                    next_layer_sensitive[d, :, :] 
-                )
+        # for f in range(self.filter_number):
+        #     for d in range(next_layer_chunnel_number):
+        #         detas[f, :, :] += np.multiply(
+        #             self.activator_grds[f, :, :],
+        #             next_layer_sensitive[d, :, :] 
+        #         )
 
         # 计算当前层filters的权值梯度
         pd_height = self.input_shape[1] - self.filter_shape[0] + 1
         pd_width  = self.input_shape[2] - self.filter_shape[1] + 1
         pd_shape  = [pd_height, pd_width]
-        # detas = np.ones(self.output_shape)
+        detas = np.ones(self.output_shape)
         detas = extend_map_with_stride1(detas, pd_shape, self.stride)
         for f in range(self.filter_number):
+            self.bias_grads[f] = detas[f].sum()
             for d in range(self.input_shape[0]):
                 self.filter_grads[f][d, :, :] = convalution_2d(
-                    input_map[d, :, :], detas[f],
-                    [1,1] , self.bias[f][d]
+                    input_map[d, :, :], detas[f], [1,1], 0
                 )
-        # print( np.array(self.filter_grads) )
 
         #计算向后层的对应的detas要的关于当前层的值
         cur_layer_sensitive = []
         pd_shape  = [self.filter_shape[0]-1, self.filter_shape[1]-1]
         for d in range(self.input_shape[0]):
-            cur_map  = np.zeros([self.input_shape[1], self.input_shape[2]], dtype=float)
+            cur_map  = np.zeros([self.input_shape[1], self.input_shape[2]], dtype=np.float64)
             for f in range(self.filter_number):
                 pd_detas = padding_0(detas[f], pd_shape)
                 rotate_filter = np.rot90(self.filters[f][d, :, :], 2)
                 cur_map += convalution_2d(
-                    pd_detas, rotate_filter,
-                    [1,1], self.bias[f][d]
+                    pd_detas, rotate_filter, [1,1], 0
                 )
             cur_layer_sensitive.append(cur_map)
-        return np.array(cur_layer_sensitive)
+
+        # 更新权值
+        for f in range(self.filter_number):
+            self.bias[f]    -= self.bias_grads[f]
+            self.filters[f] -= self.filter_grads[f]
+
+        return np.array(cur_layer_sensitive, dtype = np.float64)
         
 class PoolingLayer(Layer):
     def __init__(self, input_shape, pooling_shape, stride, padding_size, pooling_type):
@@ -127,15 +141,16 @@ class PoolingLayer(Layer):
         
     def forward_pass(self, input_map):
         assert(input_map.shape == tuple(self.input_shape))
-
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
         input_map = padding_0(input_map, self.padding_size)
-        input_map = np.array(input_map)
+        input_map = np.array(input_map, dtype = np.float64)
         # print(input_map)
         ph, pw = self.pooling_shape
         _, in_height, in_width  = input_map.shape
         depth, height, width    = self.output_shape
         self.index_map = np.zeros(self.output_shape, dtype=tuple)
-        output_map = np.zeros(self.output_shape, dtype=float)
+        output_map = np.zeros(self.output_shape, dtype=np.float64)
         for d in range(depth):
             for h in range(height):
                 for w in range(width):
@@ -151,7 +166,10 @@ class PoolingLayer(Layer):
         return output_map
 
     def backward_pass(self, input_map, next_layer_sensitive):
-        cur_layer_sensitive  = np.zeros(self.input_shape, dtype=float)
+        assert(input_map.shape == tuple(self.input_shape))
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
+        cur_layer_sensitive  = np.zeros(self.input_shape, dtype=np.float64)
         depth, height, width = next_layer_sensitive.shape
         for d in range(depth):
             for h in range(height):
@@ -161,85 +179,78 @@ class PoolingLayer(Layer):
         return cur_layer_sensitive
 
     def get_output_shape(self):
-        width  = ceil((self.input_shape[1] - self.pooling_shape[0] + 1 + self.padding_size[0]) / self.stride[0])
-        height = ceil((self.input_shape[2] - self.pooling_shape[1] + 1 + self.padding_size[1]) / self.stride[1])
-        return [self.input_shape[0], height, width]
+        width  = ceil((self.input_shape[1] - self.pooling_shape[0] + 2*self.padding_size[0]) / self.stride[0]) + 1
+        height = ceil((self.input_shape[2] - self.pooling_shape[1] + 2*self.padding_size[1]) / self.stride[1]) + 1
+        return [self.input_shape[0], height, width] 
+
         
 class FullyConnectedLayer(Layer):
-    def __init__(self, input_shape, output_shape,):
-        pass
+    def __init__(self, input_shape, output_shape):
+        self.input_shape    = input_shape
+        self.output_shape   = output_shape
+        self.activator_grds = None
+        
+        self.bias           = np.zeros((output_shape), dtype=np.float64)
+        self.weights        = np.random.uniform(-1e-4, 1e-4, (output_shape, input_shape))
+        self.bias_grads     = np.zeros(output_shape, dtype=np.float64)
+        self.weights_grads  = np.zeros([output_shape, input_shape], dtype=np.float64)
 
-def init_test():
-    a = np.array(
-        [[[0,1,1,0,2],
-          [2,2,2,2,1], 
-          [1,0,0,2,0],
-          [0,1,1,0,0],
-          [1,2,0,0,2]],
-         [[1,0,2,2,0],
-          [0,0,0,2,0],
-          [1,2,1,2,1],
-          [1,0,0,0,0],
-          [1,2,1,1,1]],
-         [[2,1,2,0,0],
-          [1,0,0,1,0],
-          [0,2,1,0,1],
-          [0,1,2,2,2],
-          [2,1,0,0,1]]])
-    # b = np.array(
-    #     [[[0,1,1],
-    #       [2,2,2],
-    #       [1,0,0]],
-    #      [[1,0,2],
-    #       [0,0,0],
-    #       [1,2,1]]])
-    b = np.array(
-        [
-            [
-                [0,1],
-                [2,2]
-            ],
-            [
-                [1,0],
-                [1,2]
-            ] 
-        ]
-    )
+    def forward_pass(self, input_map):
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
+        input_map = input_map.flatten()
+        print(input_map.shape[0], self.input_shape)
+        assert(input_map.shape[0] == self.input_shape)
 
-    f = [
-        np.array(
-            [[[-1,1,0],
-            [0,1,0],
-            [0,1,1]],
-            [[-1,-1,0],
-            [0,0,0],
-            [0,-1,0]],
-            [[0,0,-1],
-            [0,1,0],
-            [1,-1,-1]]], dtype=float
-        ),
-        np.array(
-            [[[1,1,-1],
-            [-1,-1,1],
-            [0,-1,1]],
-            [[0,1,0],
-            [-1,0,-1],
-            [-1,1,0]],
-            [[-1,0,0],
-            [-1,0,1],
-            [-1,0,0]]], dtype=float
-            )
-    ]
-    return a, b, f
- 
+        output_map = []
+        for i in range(self.output_shape):
+            n_put = np.multiply(self.weights[i], input_map).sum() + self.bias[i]
+            output_map.append(n_put) 
+        output_map = np.array(output_map, dtype = np.float64)
+        self.activator_grds = np.array(output_map, dtype = np.float64)
+        element_wise(
+            lambda x : 1 if x > 0 else 0, self.activator_grds
+        )
+        return output_map
     
+    def backward_pass(self, input_map, next_layer_sensitive):
+        # 类型检查和shape匹配
+        if type(input_map) != 'numpy.ndarray':
+            input_map = np.array(input_map, dtype = np.float64)
+        org_shape = input_map.shape
+        input_map = input_map.flatten()
+        next_layer_sensitive = next_layer_sensitive.flatten()
+        assert(input_map.shape[0] == self.input_shape)
+        assert(next_layer_sensitive.shape[0] == self.output_shape)
+
+        # 计算本层的detas
+        detas = np.multiply(next_layer_sensitive, self.activator_grds)
+        
+        # 计算本层的梯度
+        for i in range(self.output_shape):
+            self.bias_grads[i] = detas[i].sum()
+            self.weights_grads[i, :] = detas[i] * input_map
+        
+        # 计算传递到向后层的偏导 sensitive
+        cur_layer_sensitive = np.zeros_like(input_map, dtype=np.float64)
+        for i in range(self.input_shape):
+            cur_layer_sensitive[i] = (detas * self.weights[:, i]).sum()
+        cur_layer_sensitive = cur_layer_sensitive.reshape(org_shape)
+
+        #更新本层的权值
+        self.bias    -= self.bias_grads
+        self.weights -= self.weights_grads
+
+        return cur_layer_sensitive
+  
 if __name__ == '__main__':
     input_map, sen, f = init_test()
-    # x = PoolingLayer([3,5,5],[2,2],[0,0], 'max')
-    x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
-    x.filters = f
+    # x = PoolingLayer([3,5,5],[2,2],[2, 2], [0,0], 'max')
+    x = FullyConnectedLayer(5*5*3, 8)
+    # x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
+    # x.filters = f
     # print(input_map.shape)
     y = x.forward_pass(input_map)
-    # print(y)
+    print(y)
     y = x.backward_pass(input_map,sen)
     print(y)
