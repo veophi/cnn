@@ -8,7 +8,7 @@ class Layer(object):
     def __init__(self):
         pass
 
-    def forward_pass(self):
+    def forward_pass(self, input_map):
         pass
 
     def backward_pass(self, input_map, next_layer_sensitive):
@@ -78,14 +78,14 @@ class Convalution2DLayer(Layer):
         if type(input_map) != 'numpy.ndarray':
             input_map = np.array(input_map, dtype=np.float64)
 
-        # 计算当前层的detas
-        detas = np.multiply(next_layer_sensitive, self.activator_grds)
-        # detas = np.zeros(self.output_shape, dtype=np.float64)
+        # 计算当前层的deltas
+        deltas = np.multiply(next_layer_sensitive, self.activator_grds)
+        # deltas = np.zeros(self.output_shape, dtype=np.float64)
         # next_layer_chunnel_number = next_layer_sensitive.shape[0]
         # print(next_layer_sensitive.shape, self.activator(5))
         # for f in range(self.filter_number):
         #     for d in range(next_layer_chunnel_number):
-        #         detas[f, :, :] += np.multiply(
+        #         deltas[f, :, :] += np.multiply(
         #             self.activator_grds[f, :, :],
         #             next_layer_sensitive[d, :, :] 
         #         )
@@ -94,25 +94,25 @@ class Convalution2DLayer(Layer):
         pd_height = self.input_shape[1] - self.filter_shape[0] + 1
         pd_width  = self.input_shape[2] - self.filter_shape[1] + 1
         pd_shape  = [pd_height, pd_width]
-        # detas = np.ones(self.output_shape) #for debug
-        detas = extend_map_with_stride1(detas, pd_shape, self.stride)
+        # deltas = np.ones(self.output_shape) #for debug
+        deltas = extend_map_with_stride1(deltas, pd_shape, self.stride)
         for f in range(self.filter_number):
-            self.bias_grads[f] = detas[f].sum()
+            self.bias_grads[f] = deltas[f].sum()
             for d in range(self.input_shape[0]):
                 self.filter_grads[f][d, :, :] = convalution_2d(
-                    input_map[d, :, :], detas[f], [1,1], 0
+                    input_map[d, :, :], deltas[f], [1,1], 0
                 )
 
-        #计算向后层的对应的detas要的关于当前层的值
+        #计算向后层的对应的deltas要的关于当前层的值
         cur_layer_sensitive = []
         pd_shape  = [self.filter_shape[0]-1, self.filter_shape[1]-1]
         for d in range(self.input_shape[0]):
             cur_map  = np.zeros([self.input_shape[1], self.input_shape[2]], dtype=np.float64)
             for f in range(self.filter_number):
-                pd_detas = padding_0(detas[f], pd_shape)
+                pd_deltas = padding_0(deltas[f], pd_shape)
                 rotate_filter = np.rot90(self.filters[f][d, :, :], 2)
                 cur_map += convalution_2d(
-                    pd_detas, rotate_filter, [1,1], 0
+                    pd_deltas, rotate_filter, [1,1], 0
                 )
             cur_layer_sensitive.append(cur_map)
 
@@ -184,6 +184,7 @@ class PoolingLayer(Layer):
 class FullyConnectedLayer(Layer):
     def __init__(self, input_shape, output_shape, learning_rate, activator_type):
         self.activator      = get_activator(activator_type)
+        self.atvrgrds_func  = get_activator_grads_func(activator_type)
         self.input_shape    = input_shape
         self.output_shape   = output_shape
         self.learning_rate  = learning_rate
@@ -199,6 +200,7 @@ class FullyConnectedLayer(Layer):
         if type(input_map) != 'numpy.ndarray':
             input_map = np.array(input_map, dtype=np.float64)
         input_map = input_map.flatten()
+        # print('??? => ', input_map.shape[0], self.input_shape)
         assert(input_map.shape[0] == self.input_shape)
 
         #计算当前层输出
@@ -211,7 +213,7 @@ class FullyConnectedLayer(Layer):
         #计算当前层激活函数导数
         self.activator_grds = np.array(output_map, dtype=np.float64)
         element_wise(
-            lambda x : 1 if x > 0 else 0, self.activator_grds
+            self.atvrgrds_func, self.activator_grds
         )
         
         return output_map
@@ -226,18 +228,18 @@ class FullyConnectedLayer(Layer):
         assert(input_map.shape[0] == self.input_shape)
         assert(next_layer_sensitive.shape[0] == self.output_shape)
 
-        # 计算本层的detas
-        detas = np.multiply(next_layer_sensitive, self.activator_grds)
+        # 计算本层的deltas
+        deltas = np.multiply(next_layer_sensitive, self.activator_grds)
         
         # 计算本层的梯度
         for i in range(self.output_shape):
-            self.bias_grads[i] = detas[i].sum()
-            self.weights_grads[i, :] = detas[i] * input_map
+            self.bias_grads[i] = deltas[i].sum()
+            self.weights_grads[i, :] = deltas[i] * input_map
         
         # 计算传递到向后层的偏导 sensitive
         cur_layer_sensitive = np.zeros_like(input_map, dtype=np.float64)
         for i in range(self.input_shape):
-            cur_layer_sensitive[i] = (detas * self.weights[:, i]).sum()
+            cur_layer_sensitive[i] = (deltas * self.weights[:, i]).sum()
         cur_layer_sensitive = cur_layer_sensitive.reshape(org_shape)
 
         #更新本层的权值
