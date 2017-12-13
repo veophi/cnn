@@ -79,16 +79,20 @@ def get_activator(activator_type = str):
         return lambda x : x if x > 0 else 0
     elif activator_type.lower() == 'sigmoid':
         return lambda x : 1.0 / (1.0 + exp(-x)) if x < 1e100 else 1
+    elif activator_type.lower() == 'prelu':
+        return lambda x : max(0.01*x, x)
     else:
         return lambda x : x
 
 def get_activator_grads_func(activator_type):
     if activator_type.lower() == 'relu':
-        return lambda x : 1 if x > 0 else 0
+        return lambda x : 1.0 if x > 0 else 0
     elif activator_type.lower() == 'sigmoid':
         return lambda x : x * (1.0 - x)
+    elif activator_type.lower() == 'prelu':
+        return lambda x : 0.01 if x < 0 else 1.0
     else:
-        return lambda x : x
+        return lambda x : 1
 
 def init_test():
     a = np.array(
@@ -115,10 +119,10 @@ def init_test():
     #       [0,0,0],
     #       [1,2,1]]])
     b = np.array(
-        [[[0,1],
-        [2,2]],
-        [[1,0],
-        [1,2]]], dtype=np.float64)
+        [[[1,1],
+        [1,1]],
+        [[1,1],
+        [1,1]]], dtype=np.float64)
 
     f = [
         np.array(
@@ -151,9 +155,9 @@ if __name__ == '__main__':
     input_map, sen, f = init_test()
     x = PoolingLayer([3,5,5],[2,2],[2, 2], [0,0], 'max')
     # x = FullyConnectedLayer(5*5*3, 8, 0.0001, 'relu')
-    x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
+    # x = Convalution2DLayer([3,5,5],2, [3,3], [2,2], [0, 0], 0.0001, 'relu')
     # x.filters = f
-    # print(input_map.shape)
+    print(input_map)
     y = x.forward_pass(input_map)
     print(y)
     y = x.backward_pass(input_map,sen)

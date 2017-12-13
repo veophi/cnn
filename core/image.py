@@ -73,9 +73,9 @@ class DataUtils(object):
             imgVal = list(imgVal)
             for j in range(len(imgVal)):
                 if imgVal[j] > 1:
-                    imgVal[j] = 1
+                    imgVal[j] = 1.0
             images.append(imgVal)
-        return np.array(images)
+        return np.array(images, dtype=np.float64)
 
     def getLabel(self):
         """
@@ -108,3 +108,43 @@ class DataUtils(object):
             plt.figure()
             plt.imshow(img, cmap = 'binary') #将图像黑白显示
             # plt.savefig(self._outpath + "/" + outfile)
+
+def get_iamge():
+    trainfile_X = '../dataset/MNIST/train-images.idx3-ubyte'
+    trainfile_y = '../dataset/MNIST/train-labels.idx1-ubyte'
+    testfile_X = '../dataset/MNIST/t10k-images.idx3-ubyte'
+    testfile_y = '../dataset/MNIST/t10k-labels.idx1-ubyte'
+
+    train_X = DataUtils(filename=trainfile_X).getImage()
+    train_y = DataUtils(filename=trainfile_y).getLabel()
+    test_X = DataUtils(testfile_X).getImage()
+    test_y = DataUtils(testfile_y).getLabel()
+
+    hot_codes = np.array([
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        ]
+    )
+
+    dealer =  DataUtils(filename=trainfile_y)
+
+    # print(train_X.shape)
+    #以下内容是将图像保存到本地文件中
+    #path_trainset = "../dataset/MNIST/imgs_train"
+    #path_testset = "../dataset/MNIST/imgs_test"
+    #if not os.path.exists(path_trainset):
+    #    os.mkdir(path_trainset)
+    #if not os.path.exists(path_testset):
+    #    os.mkdir(path_testset)
+    #DataUtils(outpath=path_trainset).outImg(train_X, train_y)
+    #DataUtils(outpath=path_testset).outImg(test_X, test_y)
+
+    return train_X, train_y, test_X, test_y, hot_codes, dealer

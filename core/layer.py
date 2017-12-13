@@ -26,12 +26,15 @@ class Convalution2DLayer(Layer):
         self.activator      = get_activator(activator_type)
         self.output_shape   = self.get_output_shape()
         self.activator_grds = np.zeros(self.output_shape, dtype=np.float64)
+        self.atvrgrds_func  = get_activator_grads_func(activator_type)
 
         self.bias           = np.zeros((self.filter_number), dtype=np.float64)
         self.bias_grads     = np.zeros((self.filter_number), dtype=np.float64)
 
+        n = (sum(self.input_shape) + sum(self.output_shape)) / 2
+        scale = sqrt(6 / n)
         self.filters        = [
-            np.random.uniform(-1e-4, 1e-4, [input_shape[0], filter_shape[0], filter_shape[1]])
+            np.random.uniform(-scale, scale, [input_shape[0], filter_shape[0], filter_shape[1]])
             for _ in range(filter_number)
         ]
         self.filter_grads   = [
@@ -65,7 +68,7 @@ class Convalution2DLayer(Layer):
         #获得当前层激活函数的导数
         self.activator_grds = np.array(output_map, dtype=np.float64)
         element_wise(
-            lambda x : 1 if x > 0 else 0, self.activator_grds
+           self.atvrgrds_func, self.activator_grds
         )
 
         return output_map
@@ -144,7 +147,7 @@ class PoolingLayer(Layer):
             input_map = np.array(input_map, dtype=np.float64)
 
         #计算当前层输出
-        ph, pw     = self.pooling_shape
+        ph, pw     = self.stride
         input_map  = padding_0(input_map, self.padding_size)
         output_map = np.zeros(self.output_shape, dtype=np.float64)
         _, in_height, in_width  = input_map.shape
@@ -190,8 +193,10 @@ class FullyConnectedLayer(Layer):
         self.learning_rate  = learning_rate
         self.activator_grds = None
         
+        n = (self.input_shape + self.output_shape) / 2
+        scale = sqrt(6 / n)
         self.bias           = np.zeros((output_shape), dtype=np.float64)
-        self.weights        = np.random.uniform(-1e-4, 1e-4, (output_shape, input_shape))
+        self.weights        = np.random.uniform(-scale, scale, (output_shape, input_shape))
         self.bias_grads     = np.zeros(output_shape, dtype=np.float64)
         self.weights_grads  = np.zeros([output_shape, input_shape], dtype=np.float64)
 
