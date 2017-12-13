@@ -1,3 +1,5 @@
+# -*- coding:utf-8 -*-
+
 import layer as ly
 import numpy as np
 from image import *
