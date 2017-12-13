@@ -94,7 +94,7 @@ if __name__ == '__main__':
         for i in range(patch):
             if i % 1000 == 0:
                 error = model.test(testx, testy, codes)
-                print('correct-> ', _, error)   
+                print('acc-> ', _, error)   
             t = model.train_one_sample_once(tx[i, :].reshape(1,28,28), codes[ty[i], :])
             temp_total += t
             if i % 100 == 0 and i != 0:
